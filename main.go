@@ -21,25 +21,34 @@ func main() {
 	// Loop through each update.
 	for update := range updates {
 		if update.Message != nil && update.Message.IsCommand() {
-			var options []string
-			question := "Mory:"
-			
-			switch update.Message.Command() {
-			case "cur":
-				question = curWeekQuestion
-				options = getCurWeekPollParams()
-			case "next":
-				question = nextWeekQuestion
-				options = getNextWeekPollParams()
-			}
+			command := update.Message.Command()
+			switch command {
+			case "cur", "next":
+				var options []string
+				question := "Mory:"
+				
+				switch update.Message.Command() {
+				case "cur":
+					question = curWeekQuestion
+					options = getCurWeekPollParams()
+				case "next":
+					question = nextWeekQuestion
+					options = getNextWeekPollParams()
+				}
 
-			if options != nil {
-				poll := tgbotapi.NewPoll(update.Message.Chat.ID, question, options...)
+				if options != nil {
+					poll := tgbotapi.NewPoll(update.Message.Chat.ID, question, options...)
 
-				poll.IsAnonymous = false
-				poll.AllowsMultipleAnswers = true
+					poll.IsAnonymous = false
+					poll.AllowsMultipleAnswers = true
 
-				if _, err := bot.Send(poll); err != nil {
+					if _, err := bot.Send(poll); err != nil {
+						log.Panic(err)
+					}
+				}
+			case "enjoy":
+				anim := tgbotapi.NewAnimation(update.Message.Chat.ID, tgbotapi.FilePath("./resources/enjoy.gif.mp4"))
+				if _, err := bot.Send(anim); err != nil {
 					log.Panic(err)
 				}
 			}
