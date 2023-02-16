@@ -1,4 +1,4 @@
-module arichi/testbot
+module arichi/beer-enjoyer
 
 go 1.19
 
