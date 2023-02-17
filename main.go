@@ -1,14 +1,22 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"strconv"
-	"time"
+
+	"arichi/beerEnjoyer/calendar"
+	"arichi/beerEnjoyer/poll"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+type calendarID struct {
+	chatID int64
+	messID int
+	userID int64
+}
+
+var calendarCache = make(map[calendarID]*calendar.CalendarInfo)
 
 func main() {
 	bot, err := tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_APITOKEN"))
@@ -23,35 +31,25 @@ func main() {
 
 	// Loop through each update.
 	for update := range updates {
-		// if (update.Message != nil && update.Message.Text != "") {
-		// 	t := []rune(update.Message.Text)
-		// 	fmt.Printf("%v %v", len(t), t)
-		// }
 		if update.Message != nil && update.Message.IsCommand() {
 			command := update.Message.Command()
 			switch command {
 			case "cur", "next":
-				var options []string
-				question := "Mory:"
-
+				var p poll.Poll
 				switch update.Message.Command() {
 				case "cur":
-					question = curWeekQuestion
-					options = getCurWeekPollParams()
+					p = poll.CreatePoll(poll.CurWeekPoll)
 				case "next":
-					question = nextWeekQuestion
-					options = getNextWeekPollParams()
+					p = poll.CreatePoll(poll.NextWeekPoll)
 				}
 
-				if options != nil {
-					poll := tgbotapi.NewPoll(update.Message.Chat.ID, question, options...)
+				poll := tgbotapi.NewPoll(update.Message.Chat.ID, p.Question, p.Options...)
 
-					poll.IsAnonymous = false
-					poll.AllowsMultipleAnswers = true
+				poll.IsAnonymous = false
+				poll.AllowsMultipleAnswers = true
 
-					if _, err := bot.Send(poll); err != nil {
-						log.Panic(err)
-					}
+				if _, err := bot.Send(poll); err != nil {
+					log.Panic(err)
 				}
 			case "enjoy":
 				anim := tgbotapi.NewAnimation(update.Message.Chat.ID, tgbotapi.FilePath("./resources/enjoy.gif.mp4"))
@@ -61,46 +59,55 @@ func main() {
 			case "ck":
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "выберите год")
 
-				msg.ReplyMarkup = newCalendarKeyboard(yearKeyboard, time.Now())
+				calendarInfo, _ := calendar.NewCalendar(calendar.DayKeyboard)
+
+				msg.ReplyMarkup = calendarInfo.Keyboard
 
 				if sendMsg, err := bot.Send(msg); err != nil {
 					log.Panic(err)
 				} else {
-					calendarCache[sendMsg.MessageID] = &calendarInfo{state: yearKeyboard}
+					id := calendarID {
+						chatID: sendMsg.Chat.ID,
+						messID: sendMsg.MessageID,
+						userID: update.Message.From.ID,
+					}
+					calendarCache[id] = calendarInfo
 				}
 			}
 		} else if update.CallbackQuery != nil {
 			chatID := update.CallbackQuery.Message.Chat.ID
 			messageID := update.CallbackQuery.Message.MessageID
+			calID := calendarID {
+				chatID: chatID,
+				messID: messageID,
+				userID: update.CallbackQuery.From.ID,
+			}
 			var requests []tgbotapi.Chattable
 
-			if info, ok := calendarCache[messageID]; ok {
-				switch (info.state) {
-				case yearKeyboard:
-					info.state = monthKeyboard
-					info.year, _ = strconv.Atoi(update.CallbackQuery.Data) // TODO catch error
-					t, _ := time.Parse("2006-01-02", fmt.Sprintf("%04d-01-01", info.year))
+			if info, ok := calendarCache[calID]; ok && update.CallbackQuery.Data != calendar.EmptyData {
+				info.Update(update.CallbackQuery.Data)
+				switch (info.State) {
+				case calendar.YearKeyboard:
+					requests = []tgbotapi.Chattable{
+						tgbotapi.NewEditMessageText(chatID, messageID, "выберите год"),
+						tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, info.Keyboard),
+					}
+				case calendar.MonthKeyboard:
 					requests = []tgbotapi.Chattable{
 						tgbotapi.NewEditMessageText(chatID, messageID, "выберите месяц"),
-						tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, newCalendarKeyboard(monthKeyboard, t)),
+						tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, info.Keyboard),
 					}
-				case monthKeyboard:
-					info.state = dayKeyboard
-					info.month, _ = strconv.Atoi(update.CallbackQuery.Data) // TODO catch error
-					t, _ := time.Parse("2006-01-02", fmt.Sprintf("%04d-%02d-01", info.year, info.month))
+				case calendar.DayKeyboard:
 					requests = []tgbotapi.Chattable{
 						tgbotapi.NewEditMessageText(chatID, messageID, "выберите день"),
-						tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, newCalendarKeyboard(dayKeyboard, t)),
+						tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, info.Keyboard),
 					}
-				case dayKeyboard:
-					if update.CallbackQuery.Data != " " {
-						info.day, _ = strconv.Atoi(update.CallbackQuery.Data) // TODO catch error
-						requests = []tgbotapi.Chattable{
-							NewEditMessageDeleteInlineKeyboard(chatID, messageID),
-							tgbotapi.NewEditMessageText(chatID, messageID, fmt.Sprintf("%02d/%02d/%04d", info.day, info.month, info.year)),
-						}
-						delete(calendarCache, messageID)
+				case calendar.Finish:
+					requests = []tgbotapi.Chattable{
+						NewEditMessageDeleteInlineKeyboard(chatID, messageID),
+						tgbotapi.NewEditMessageText(chatID, messageID, info.String()),
 					}
+					delete(calendarCache, calID)
 				default:
 					continue
 				}

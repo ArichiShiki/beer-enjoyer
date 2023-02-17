@@ -1,4 +1,4 @@
-module arichi/beer-enjoyer
+module arichi/beerEnjoyer
 
 go 1.19
 
