@@ -29,7 +29,6 @@ func main() {
 
 	updates := bot.GetUpdatesChan(u)
 
-	// Loop through each update.
 	for update := range updates {
 		if update.Message != nil && update.Message.IsCommand() {
 			command := update.Message.Command()
@@ -52,7 +51,7 @@ func main() {
 					log.Panic(err)
 				}
 			case "enjoy":
-				anim := tgbotapi.NewAnimation(update.Message.Chat.ID, tgbotapi.FilePath("./resources/enjoy.gif.mp4"))
+				anim := tgbotapi.NewAnimation(update.Message.Chat.ID, tgbotapi.FileID(os.Getenv("GIF_ID")))
 				if _, err := bot.Send(anim); err != nil {
 					log.Panic(err)
 				}
@@ -111,8 +110,6 @@ func main() {
 				default:
 					continue
 				}
-				//deleteRequest := tgbotapi.NewDeleteMessage(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID)
-				//msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, fmt.Sprintf("Вы выбрали: %v", update.CallbackQuery.Data))
 				for _, r := range requests {
 					if _, err := bot.Request(r); err != nil {
 						panic(err)
