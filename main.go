@@ -116,6 +116,16 @@ func main() {
 					}
 				}
 			}
+		} else if (update.InlineQuery != nil) {
+			inlineConfig := tgbotapi.InlineConfig{
+				InlineQueryID: update.InlineQuery.ID,
+				IsPersonal:    true,
+				CacheTime:     0,
+				Results: []interface{}{tgbotapi.NewInlineQueryResultCachedGIF(update.InlineQuery.ID, os.Getenv("GIF_ID"))},
+		 	}
+			 if _, err := bot.Request(inlineConfig); err != nil {
+				panic(err)
+			}
 		}
 	}
 }
